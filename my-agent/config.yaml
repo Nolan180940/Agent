@@ -1,5 +1,5 @@
 llm:
-  model: "qwen2.5-coder:7b"
+  model: "phi3:mini"
   base_url: "http://localhost:11434"
   context_limit: 10
 

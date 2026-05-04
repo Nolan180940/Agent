@@ -292,25 +292,31 @@ def main_page():
             tasks_table = ui.table(
                 columns=task_columns,
                 rows=load_tasks(),
-                row_key='id'
+                row_key='id',
+                selection='single'
             ).classes('w-full').props('flat bordered')
             
             def refresh_tasks():
                 tasks_table.rows = load_tasks()
                 tasks_table.update()
             
-            # Add action buttons
-            with tasks_table.add_slot('body-cell-action'):
-                def render_action_button(cell):
-                    with ui.row():
-                        if cell.value['enabled']:
-                            ui.button(icon='pause', on_click=lambda: toggle_task(cell.value['id'], False)).props('flat size=sm')
-                        else:
-                            ui.button(icon='play_arrow', on_click=lambda: toggle_task(cell.value['id'], True)).props('flat size=sm')
-                        
-                        ui.button(icon='delete', on_click=lambda: delete_task(cell.value['id'])).props('flat size=sm color=negative')
+            # Action buttons for selected task
+            with ui.row().classes('mt-2 gap-2'):
+                def perform_toggle():
+                    if tasks_table.selected and len(tasks_table.selected) > 0:
+                        selected_id = tasks_table.selected[0]['id']
+                        selected_enabled = tasks_table.selected[0]['enabled'] == '✓'
+                        toggle_task(selected_id, not selected_enabled)
+                        refresh_tasks()
                 
-                tasks_table.add_slot('body-cell-action', render_action_button)
+                def perform_delete():
+                    if tasks_table.selected and len(tasks_table.selected) > 0:
+                        selected_id = tasks_table.selected[0]['id']
+                        delete_task(selected_id)
+                        refresh_tasks()
+                
+                ui.button('Toggle', on_click=perform_toggle, icon='play_arrow').props('size=sm')
+                ui.button('Delete', on_click=perform_delete, icon='delete', color='negative').props('size=sm')
 
 
 def reset_agent():
@@ -400,13 +406,17 @@ def ready():
     return {'status': 'ready'}
 
 
-if __name__ in {"__main__", "__mp_main__"}:
-    # Load scheduled tasks
+# Startup handler - runs when the event loop is ready
+@app.on_startup
+async def startup_scheduler():
+    """Initialize scheduler when the event loop is running."""
     if config["scheduler"]["enabled"]:
         scheduler.start()
         load_scheduled_tasks()
         print(f"Scheduler started with {len(scheduler.get_jobs())} jobs")
-    
+
+
+if __name__ in {"__main__", "__mp_main__"}:
     # Start NiceGUI
     ui.run(
         title='My-Agent Control Panel',
