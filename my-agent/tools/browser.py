@@ -16,16 +16,36 @@ _browser: Optional[Browser] = None
 _context: Optional[BrowserContext] = None
 _page: Optional[Page] = None
 _playwright = None
+_browser_type: str = "chromium"
+_headless: bool = False
 
 
-async def get_browser(browser_type: str = "chromium", headless: bool = False) -> Browser:
+def configure_browser(browser_type: str = "chromium", headless: bool = False):
+    """Configure the default browser used by Playwright tools."""
+    global _browser_type, _headless
+    _browser_type = browser_type
+    _headless = headless
+
+
+def _launch_browser(browser_type: str, headless: bool):
+    """Resolve a browser launcher, including Microsoft Edge channel support."""
+    if browser_type in {"edge", "msedge", "microsoft-edge"}:
+        return "chromium", {"channel": "msedge", "headless": headless}
+
+    return browser_type, {"headless": headless}
+
+
+async def get_browser(browser_type: Optional[str] = None, headless: Optional[bool] = None) -> Browser:
     """Get or create browser instance."""
     global _browser, _playwright
+    browser_type = browser_type or _browser_type
+    headless = _headless if headless is None else headless
     
     if _browser is None or not _browser.is_connected():
         _playwright = await async_playwright().start()
-        browser_launcher = getattr(_playwright, browser_type)
-        _browser = await browser_launcher.launch(headless=headless)
+        launcher_name, launch_kwargs = _launch_browser(browser_type, headless)
+        browser_launcher = getattr(_playwright, launcher_name)
+        _browser = await browser_launcher.launch(**launch_kwargs)
     
     return _browser
 

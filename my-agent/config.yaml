@@ -1,5 +1,5 @@
 llm:
-  model: "phi3:mini"
+  model: "qwen2.5-coder:7b"
   base_url: "http://localhost:11434"
   context_limit: 10
 
@@ -7,8 +7,11 @@ security:
   mode: "safe"
 
 automation:
-  browser: "chromium"
+  browser: "msedge"
   headless: false
+
+firecrawl:
+  api_key: ""
 
 scheduler:
   enabled: true

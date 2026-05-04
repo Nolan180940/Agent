@@ -2,6 +2,7 @@
 Main entry point - starts NiceGUI web interface and scheduler.
 """
 import asyncio
+import os
 import yaml
 from pathlib import Path
 from datetime import datetime
@@ -13,7 +14,8 @@ from apscheduler.triggers.cron import CronTrigger
 from database import Database
 from llm_provider import LLMProvider
 from agent_core import AgentCore, AgentStatus
-from tools.base import get_all_tools, TOOL_REGISTRY
+from tools import get_all_tools, TOOL_REGISTRY
+from tools.browser import configure_browser
 
 
 # Load configuration
@@ -21,8 +23,13 @@ config_path = Path(__file__).parent / "config.yaml"
 with open(config_path) as f:
     config = yaml.safe_load(f)
 
+firecrawl_key = config.get("firecrawl", {}).get("api_key")
+if firecrawl_key:
+    os.environ.setdefault("FIRECRAWL_API_KEY", firecrawl_key)
+
 # Initialize components
 db = Database()
+configure_browser(config["automation"]["browser"], config["automation"]["headless"])
 llm = LLMProvider(
     model=config["llm"]["model"],
     base_url=config["llm"]["base_url"],

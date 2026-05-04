@@ -1,13 +1,15 @@
 """
 Agent core logic with ReAct loop and confirmation mechanism.
 """
+import ast
+import inspect
 import json
 import asyncio
 from typing import Dict, List, Optional, Callable, Any
 from enum import Enum
 
 from llm_provider import LLMProvider
-from tools.base import get_all_tools, Tool, TOOL_REGISTRY
+from tools import get_all_tools, Tool, TOOL_REGISTRY
 from database import Database
 
 
@@ -72,6 +74,17 @@ class AgentCore:
 6. Always explain what you're doing before doing it
 7. If a tool fails, try to recover or ask for help
 8. When finished, summarize what was accomplished
+9. If the user says "open google" or "open google.com", use open_browser("https://www.google.com") instead of search_google
+10. Prefer opening the requested page directly over using a search results page unless the user explicitly asks to search
+
+## Tool Output Format
+If native tool calling is unavailable, respond with exactly one executable tool call in one of these formats:
+- Tool: tool_name(param1="value1", param2=123)
+- ```json
+    {{"tool": "tool_name", "params": {{"param1": "value1", "param2": 123}}}}
+    ```
+
+Do not wrap tool calls in extra explanation when you intend to execute an action.
 
 ## Important Safety Notes
 - The user will see all your actions and must confirm dangerous operations
@@ -109,43 +122,64 @@ class AgentCore:
         # Default to requiring confirmation
         return False
     
-    def _parse_tool_call(self, response: str) -> Optional[Dict]:
-        """
-        Parse tool call from LLM response.
-        
-        Looks for patterns like:
-        - Tool: tool_name(param1="value1", param2="value2")
-        - Call tool_name with param1="value1"
-        - ```json {"tool": "name", "params": {...}} ```
-        """
-        # Try JSON format first
+    def _parse_arguments(self, tool_name: str, args_source: str) -> Optional[Dict[str, Any]]:
+        """Bind positional and keyword arguments to the registered tool signature."""
+        try:
+            signature = inspect.signature(TOOL_REGISTRY[tool_name]["function"])
+            call = ast.parse(f"_tool({args_source})", mode="eval").body
+            if not isinstance(call, ast.Call):
+                return None
+
+            positional_args = [ast.literal_eval(arg) for arg in call.args]
+            keyword_args = {kw.arg: ast.literal_eval(kw.value) for kw in call.keywords if kw.arg}
+
+            bound = signature.bind_partial(*positional_args, **keyword_args)
+            return dict(bound.arguments)
+        except Exception:
+            return None
+
+    def _extract_tool_calls(self, response: str) -> List[Dict[str, Any]]:
+        """Extract tool calls from structured or code-like LLM output."""
         import re
-        json_match = re.search(r'```(?:json)?\s*({"tool"[^}]+})\s*```', response, re.DOTALL)
+
+        tool_calls: List[Dict[str, Any]] = []
+
+        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
         if json_match:
             try:
-                return json.loads(json_match.group(1))
+                parsed = json.loads(json_match.group(1))
+                if isinstance(parsed, dict) and parsed.get("tool"):
+                    params = parsed.get("params", {})
+                    if isinstance(params, dict):
+                        tool_calls.append({"tool": parsed["tool"], "params": params})
+                        return tool_calls
             except json.JSONDecodeError:
                 pass
-        
-        # Try Tool: pattern
-        tool_match = re.search(r'Tool:\s*(\w+)\(([^)]*)\)', response)
+
+        tool_match = re.search(r'Tool:\s*(\w+)\((.*?)\)', response, re.DOTALL)
         if tool_match:
             tool_name = tool_match.group(1)
-            params_str = tool_match.group(2)
-            
-            # Parse parameters (simple key=value parsing)
-            params = {}
-            if params_str.strip():
-                for param in re.findall(r'(\w+)=(?:"([^"]*)"|\'([^\']*)\'|(\d+))', params_str):
-                    key = param[0]
-                    value = param[1] or param[2] or param[3]
-                    if value.isdigit():
-                        value = int(value)
-                    params[key] = value
-            
-            return {"tool": tool_name, "params": params}
-        
-        return None
+            params = self._parse_arguments(tool_name, tool_match.group(2).strip())
+            if params is not None:
+                tool_calls.append({"tool": tool_name, "params": params})
+                return tool_calls
+
+        fenced_blocks = re.findall(r'```(?:python)?\s*(.*?)\s*```', response, re.DOTALL)
+        search_blocks = fenced_blocks if fenced_blocks else [response]
+
+        for block in search_blocks:
+            for match in re.finditer(r'\b([A-Za-z_][\w]*)\((.*?)\)', block, re.DOTALL):
+                tool_name = match.group(1)
+                if tool_name not in TOOL_REGISTRY:
+                    continue
+
+                params = self._parse_arguments(tool_name, match.group(2).strip())
+                if params is None:
+                    continue
+
+                tool_calls.append({"tool": tool_name, "params": params})
+
+        return tool_calls
     
     async def execute_tool(self, tool_name: str, parameters: Dict) -> str:
         """Execute a tool with error handling and logging."""
@@ -232,33 +266,53 @@ class AgentCore:
             
             # Get LLM response
             self._log("DEBUG", f"LLM thinking (iteration {iteration + 1})")
-            response = await self.llm.chat(full_prompt)
-            
-            self._log("DEBUG", f"LLM response: {response[:200]}...")
-            
-            # Check if response contains tool call
-            tool_call = self._parse_tool_call(response)
-            
-            if tool_call:
-                # Execute the tool
-                tool_name = tool_call.get("tool")
-                parameters = tool_call.get("params", {})
-                
-                self._log("INFO", f"Planning to call: {tool_name}", json.dumps(parameters))
-                
-                result = await self.execute_tool(tool_name, parameters)
-                
-                # Add tool interaction to history
-                conversation_history.append(f"Assistant: Calling {tool_name}({parameters})")
-                conversation_history.append(f"Tool Result: {result}")
-                
-                # Continue the loop to process next action
-                continue
+            response = await self.llm.chat(full_prompt, tools=get_all_tools())
+
+            if isinstance(response, dict):
+                response_text = response.get("content", "") or ""
+                tool_calls = response.get("tool_calls", []) or []
             else:
-                # No tool call - this is the final response
-                self._update_status(AgentStatus.IDLE)
-                self._log("INFO", f"Response: {response[:200]}...")
-                return response
+                response_text = str(response)
+                tool_calls = []
+
+            self._log("DEBUG", f"LLM response: {response_text[:200]}...")
+
+            extracted_calls: List[Dict[str, Any]] = []
+
+            if tool_calls:
+                for call in tool_calls:
+                    function_call = call.get("function", call)
+                    tool_name = function_call.get("name") or call.get("name")
+                    parameters = function_call.get("arguments") or call.get("arguments") or {}
+
+                    if isinstance(parameters, str):
+                        try:
+                            parameters = json.loads(parameters)
+                        except json.JSONDecodeError:
+                            parameters = {}
+
+                    if tool_name and isinstance(parameters, dict):
+                        extracted_calls.append({"tool": tool_name, "params": parameters})
+            else:
+                extracted_calls = self._extract_tool_calls(response_text)
+
+            if extracted_calls:
+                for tool_call in extracted_calls:
+                    tool_name = tool_call.get("tool")
+                    parameters = tool_call.get("params", {})
+
+                    self._log("INFO", f"Planning to call: {tool_name}", json.dumps(parameters))
+
+                    result = await self.execute_tool(tool_name, parameters)
+
+                    conversation_history.append(f"Assistant: Calling {tool_name}({parameters})")
+                    conversation_history.append(f"Tool Result: {result}")
+
+                continue
+
+            self._update_status(AgentStatus.IDLE)
+            self._log("INFO", f"Response: {response_text[:200]}...")
+            return response_text
         
         # Max iterations reached
         self._update_status(AgentStatus.ERROR)

@@ -2,7 +2,7 @@
 Ollama LLM provider with async support.
 """
 import ollama
-from typing import List, Dict, AsyncGenerator, Optional
+from typing import List, Dict, AsyncGenerator, Optional, Any
 import asyncio
 
 
@@ -16,6 +16,7 @@ class LLMProvider:
         self.base_url = base_url
         self.context_limit = context_limit
         self.client = ollama.AsyncClient(host=base_url)
+        self.tools_supported: Optional[bool] = None
         
         # Conversation history management
         self.history: List[Dict[str, str]] = []
@@ -40,7 +41,7 @@ class LLMProvider:
         else:
             self.history.insert(0, {"role": "system", "content": prompt})
     
-    async def chat(self, message: str, tools: List[Dict] = None) -> str:
+    async def chat(self, message: str, tools: List[Dict] = None) -> Dict[str, Any]:
         """
         Send a message and get a response.
         
@@ -49,7 +50,7 @@ class LLMProvider:
             tools: Optional list of tool definitions for function calling
         
         Returns:
-            Assistant response text
+            Dictionary containing assistant content and tool call metadata
         """
         # Add user message to history
         self.history.append({"role": "user", "content": message})
@@ -63,24 +64,68 @@ class LLMProvider:
                 'stream': False,
             }
             
-            if tools:
+            if tools and self.tools_supported is not False:
                 kwargs['tools'] = tools
             
             # Call Ollama API
             response = await self.client.chat(**kwargs)
             
             # Extract response
-            assistant_message = response['message']['content']
+            assistant_data = response.get('message', {})
+            assistant_message = assistant_data.get('content', '')
+            tool_calls = assistant_data.get('tool_calls', []) or []
             
             # Add to history
             self.history.append({"role": "assistant", "content": assistant_message})
             
-            return assistant_message
+            return {
+                "content": assistant_message,
+                "tool_calls": tool_calls,
+                "raw": response,
+            }
             
         except Exception as e:
+            error_text = str(e)
+
+            if tools and self.tools_supported is not False and (
+                "does not support tools" in error_text.lower()
+                or "status code: 400" in error_text.lower()
+            ):
+                self.tools_supported = False
+
+                try:
+                    fallback_response = await self.client.chat(
+                        model=self.model,
+                        messages=self.history.copy(),
+                        stream=False,
+                    )
+
+                    assistant_data = fallback_response.get('message', {})
+                    assistant_message = assistant_data.get('content', '')
+
+                    self.history.append({"role": "assistant", "content": assistant_message})
+
+                    return {
+                        "content": assistant_message,
+                        "tool_calls": [],
+                        "raw": fallback_response,
+                    }
+                except Exception as fallback_error:
+                    error_msg = f"LLM Error: {str(fallback_error)}"
+                    self.history.append({"role": "assistant", "content": error_msg})
+                    return {
+                        "content": error_msg,
+                        "tool_calls": [],
+                        "raw": None,
+                    }
+
             error_msg = f"LLM Error: {str(e)}"
             self.history.append({"role": "assistant", "content": error_msg})
-            return error_msg
+            return {
+                "content": error_msg,
+                "tool_calls": [],
+                "raw": None,
+            }
     
     async def chat_stream(self, message: str, tools: List[Dict] = None) -> AsyncGenerator[str, None]:
         """

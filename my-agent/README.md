@@ -62,10 +62,23 @@ ollama run qwen2.5-coder:7b "Hello"
 ### 3. 安装 Playwright 浏览器
 
 ```bash
-playwright install
+python -m playwright install
 ```
 
 这会安装 Chromium、Firefox 和 WebKit 浏览器内核。
+
+### 4. 安装 Firecrawl 爬虫
+
+```bash
+pip install firecrawl-py
+```
+
+然后在环境变量里设置 `FIRECRAWL_API_KEY`，或者在 `config.yaml` 里填写：
+
+```yaml
+firecrawl:
+  api_key: "fc-your-key"
+```
 
 ---
 
@@ -192,6 +205,24 @@ def send_email(to: str, subject: str, body: str) -> str:
 
 重启系统后，Agent 即可在响应中调用您的新工具。
 
+### Firecrawl 爬虫工具
+
+系统还内置了基于 Firecrawl 的网页抓取工具，可直接读取页面内容而不依赖视觉自动化。
+
+示例：
+
+```python
+firecrawl_scrape(
+  url="www.google.com/search?q=薯片算不算UPF",
+  only_main_content=False,
+  max_age=172800000,
+  parsers=["pdf"],
+  formats=["markdown"],
+)
+```
+
+该工具会优先返回 markdown 结果，适合抓取搜索页、文章页和 PDF 解析结果。
+
 ### 工具开发规范
 
 1. **函数签名**：必须包含类型注解
@@ -216,6 +247,7 @@ my-agent/
     ├── __init__.py     # 工具注册和导出
     ├── base.py         # 工具基类和装饰器
     ├── browser.py      # Playwright 浏览器自动化
+  ├── firecrawl.py    # Firecrawl 网页抓取
     ├── system.py       # Windows 系统控制
     └── code.py         # Python 代码执行
 ```
