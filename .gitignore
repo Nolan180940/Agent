@@ -1,0 +1,28 @@
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py~
+
+# Dependencies
+venv/
+.venv/
+.env
+.env.local
+*.env.*
+
+# Database
+agent.db
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+```
