@@ -1,0 +1,14 @@
+llm:
+  model: "qwen2.5-coder:7b"
+  base_url: "http://localhost:11434"
+  context_limit: 10
+
+security:
+  mode: "safe"
+
+automation:
+  browser: "chromium"
+  headless: false
+
+scheduler:
+  enabled: true
