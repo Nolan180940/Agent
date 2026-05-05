@@ -2,6 +2,7 @@
 SQLite database operations for task logging, configuration, and scheduled rules.
 """
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Any
@@ -20,10 +21,19 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    @contextmanager
+    def _connection(self):
+        """Yield a connection and always close it afterward."""
+        conn = self._get_connection()
+        try:
+            yield conn
+        finally:
+            conn.close()
     
     def _init_db(self):
         """Initialize database tables."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             
             # Tasks table - stores workflow definitions
@@ -85,7 +95,7 @@ class Database:
                     description: str = "", cron: str = None, 
                     is_trusted: bool = False) -> int:
         """Create a new task/workflow."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO tasks (name, description, workflow_json, cron_expression, is_trusted)
@@ -96,7 +106,7 @@ class Database:
     
     def get_task(self, task_id: int) -> Optional[Dict]:
         """Get a task by ID."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
             row = cursor.fetchone()
@@ -106,7 +116,7 @@ class Database:
     
     def get_all_tasks(self) -> List[Dict]:
         """Get all tasks."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM tasks ORDER BY created_at DESC")
             return [dict(row) for row in cursor.fetchall()]
@@ -119,7 +129,7 @@ class Database:
         set_clause = ", ".join(f"{k} = ?" for k in kwargs.keys())
         values = list(kwargs.values()) + [task_id]
         
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute(f"""
                 UPDATE tasks SET {set_clause}, updated_at = CURRENT_TIMESTAMP
@@ -130,7 +140,7 @@ class Database:
     
     def delete_task(self, task_id: int) -> bool:
         """Delete a task."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
             conn.commit()
@@ -140,7 +150,7 @@ class Database:
     def add_log(self, level: str, message: str, task_id: int = None, 
                 details: str = None) -> int:
         """Add a log entry."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO logs (task_id, level, message, details)
@@ -151,7 +161,7 @@ class Database:
     
     def get_logs(self, limit: int = 100, task_id: int = None) -> List[Dict]:
         """Get recent logs."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             if task_id:
                 cursor.execute(
@@ -167,7 +177,7 @@ class Database:
     
     def clear_logs(self, older_than_days: int = 7) -> int:
         """Clear old logs."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 DELETE FROM logs 
@@ -182,7 +192,7 @@ class Database:
                               task_id: int = None, 
                               confirmed_by_user: bool = True) -> int:
         """Record a tool execution."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO tool_executions 
@@ -195,7 +205,7 @@ class Database:
     
     def get_tool_executions(self, limit: int = 50) -> List[Dict]:
         """Get recent tool executions."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT * FROM tool_executions ORDER BY created_at DESC LIMIT ?",
@@ -206,7 +216,7 @@ class Database:
     # Settings operations
     def get_setting(self, key: str, default: Any = None) -> Any:
         """Get a setting value."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
             row = cursor.fetchone()
@@ -219,7 +229,7 @@ class Database:
     
     def set_setting(self, key: str, value: Any) -> bool:
         """Set a setting value."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT OR REPLACE INTO settings (key, value, updated_at)

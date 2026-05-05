@@ -305,10 +305,25 @@ Do not wrap tool calls in extra explanation when you intend to execute an action
 
                     result = await self.execute_tool(tool_name, parameters)
 
-                    conversation_history.append(f"Assistant: Calling {tool_name}({parameters})")
+                    conversation_history.append(f"Assistant: Called {tool_name}({parameters})")
                     conversation_history.append(f"Tool Result: {result}")
 
-                continue
+                # Tool execution complete - now ask LLM to summarize and decide if done
+                conversation_history.append("Tool execution completed. Now summarize what was accomplished. Do not make any more tool calls unless absolutely necessary to complete the task.")
+                
+                # Get final response from LLM
+                full_prompt = f"{chr(10).join(conversation_history)}\n\nUser: {message}"
+                self._log("DEBUG", f"LLM thinking (final response)")
+                final_response = await self.llm.chat(full_prompt, tools=get_all_tools())
+                
+                if isinstance(final_response, dict):
+                    response_text = final_response.get("content", "") or ""
+                else:
+                    response_text = str(final_response)
+                
+                self._update_status(AgentStatus.IDLE)
+                self._log("INFO", f"Response: {response_text[:200]}...")
+                return response_text
 
             self._update_status(AgentStatus.IDLE)
             self._log("INFO", f"Response: {response_text[:200]}...")
