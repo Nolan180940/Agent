@@ -37,6 +37,7 @@ class FakeLLM:
     def __init__(self):
         self.system_prompt = ""
         self.chat_calls = []
+        self.provider = "fake"  # needed by agent_core for VLM injection check
 
     def set_system_prompt(self, prompt: str):
         self.system_prompt = prompt
@@ -44,7 +45,7 @@ class FakeLLM:
     def clear_history(self):
         self.chat_calls.clear()
 
-    async def chat(self, message: str, tools=None):
+    async def chat(self, message: str, tools=None, images=None):
         self.chat_calls.append({"message": message, "tools": tools})
 
         if len(self.chat_calls) == 1:

@@ -285,3 +285,162 @@ def run_command(command: str, shell: bool = True) -> str:
         return "Command timed out after 30 seconds"
     except Exception as e:
         return f"Failed to run command: {str(e)}"
+
+
+# ── Advanced mouse control ──────────────────────────────────────────────────
+
+@tool(category="system")
+def drag_mouse(
+    from_x: int, from_y: int,
+    to_x: int, to_y: int,
+    duration: float = 0.5,
+    button: str = "left",
+) -> str:
+    """
+    Drag the mouse from one position to another (click and hold, move, release).
+
+    Useful for drag-and-drop operations, selecting text, moving windows, etc.
+
+    Args:
+        from_x: Starting X coordinate.
+        from_y: Starting Y coordinate.
+        to_x: Ending X coordinate.
+        to_y: Ending Y coordinate.
+        duration: Time to take for the drag movement (seconds).
+        button: Mouse button to hold ("left", "right", "middle").
+
+    Returns:
+        Status message.
+    """
+    try:
+        pyautogui.moveTo(from_x, from_y, duration=0.1)
+        pyautogui.drag(to_x - from_x, to_y - from_y, duration=duration, button=button)
+        return f"Dragged mouse from ({from_x}, {from_y}) to ({to_x}, {to_y})"
+    except Exception as e:
+        return f"Failed to drag mouse: {e}"
+
+
+@tool(category="system")
+def scroll(clicks: int = -3) -> str:
+    """
+    Scroll the mouse wheel at the current position.
+
+    Args:
+        clicks: Number of scroll clicks. Positive = up, negative = down.
+                (e.g., -3 scrolls down 3 clicks, 5 scrolls up 5 clicks)
+
+    Returns:
+        Status message.
+    """
+    try:
+        pyautogui.scroll(clicks)
+        direction = "up" if clicks > 0 else "down"
+        return f"Scrolled {direction} {abs(clicks)} clicks"
+    except Exception as e:
+        return f"Failed to scroll: {e}"
+
+
+@tool(category="system")
+def hotkey(keys: str) -> str:
+    """
+    Press a key combination (e.g., Ctrl+C, Alt+Tab, Win+R).
+
+    Args:
+        keys: Keys separated by '+' (e.g., "ctrl+c", "alt+tab", "win+r", "ctrl+shift+esc").
+
+    Returns:
+        Status message.
+    """
+    try:
+        key_list = [k.strip() for k in keys.split("+")]
+        pyautogui.hotkey(*key_list)
+        return f"Pressed hotkey: {keys}"
+    except Exception as e:
+        return f"Failed to press hotkey '{keys}': {e}"
+
+
+@tool(category="system")
+def double_click(x: int = 0, y: int = 0, button: str = "left") -> str:
+    """
+    Double-click at the given coordinates (or current position if x,y=0).
+
+    Args:
+        x: X coordinate (0 = current position).
+        y: Y coordinate (0 = current position).
+        button: Mouse button ("left", "right", "middle").
+
+    Returns:
+        Status message.
+    """
+    try:
+        if x != 0 or y != 0:
+            pyautogui.moveTo(x, y, duration=0.2)
+        pyautogui.doubleClick(button=button)
+        pos = pyautogui.position()
+        return f"Double-clicked ({button}) at ({pos.x}, {pos.y})"
+    except Exception as e:
+        return f"Failed to double-click: {e}"
+
+
+@tool(category="system")
+def right_click(x: int = 0, y: int = 0) -> str:
+    """
+    Right-click at the given coordinates (or current position if x,y=0).
+
+    Args:
+        x: X coordinate (0 = current position).
+        y: Y coordinate (0 = current position).
+
+    Returns:
+        Status message.
+    """
+    try:
+        if x != 0 or y != 0:
+            pyautogui.moveTo(x, y, duration=0.2)
+        pyautogui.rightClick()
+        pos = pyautogui.position()
+        return f"Right-clicked at ({pos.x}, {pos.y})"
+    except Exception as e:
+        return f"Failed to right-click: {e}"
+
+
+@tool(category="system")
+def mouse_position() -> str:
+    """
+    Get the current mouse cursor position.
+
+    Returns:
+        Current (x, y) coordinates.
+    """
+    try:
+        x, y = pyautogui.position()
+        return f"Mouse at ({x}, {y})"
+    except Exception as e:
+        return f"Failed to get mouse position: {e}"
+
+
+@tool(category="system")
+def screenshot_region(
+    x: int, y: int, width: int, height: int,
+    filename: str = "screenshot_region.png",
+) -> str:
+    """
+    Take a screenshot of a specific screen region.
+
+    Args:
+        x: Left edge of region.
+        y: Top edge of region.
+        width: Width of region.
+        height: Height of region.
+        filename: File to save the screenshot.
+
+    Returns:
+        Path to saved screenshot.
+    """
+    try:
+        path = Path(filename)
+        screenshot = pyautogui.screenshot(region=(x, y, width, height))
+        screenshot.save(str(path.absolute()))
+        return f"Region screenshot saved to {path.absolute()}"
+    except Exception as e:
+        return f"Failed to take region screenshot: {e}"

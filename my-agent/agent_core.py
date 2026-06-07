@@ -12,6 +12,12 @@ from llm_provider import LLMProvider
 from tools import get_all_tools, Tool, TOOL_REGISTRY
 from database import Database
 
+# Inject VLM provider into vision tools if available
+try:
+    from tools.vision import set_vlm_provider
+except ImportError:
+    set_vlm_provider = None
+
 
 class AgentStatus(Enum):
     """Agent status for UI display."""
@@ -50,6 +56,10 @@ class AgentCore:
         self.on_log: Optional[Callable] = None
         self.on_confirmation_request: Optional[Callable] = None
         
+        # Inject VLM provider into vision tools for screen analysis
+        if set_vlm_provider and llm.provider == "siliconflow":
+            set_vlm_provider(llm)
+        
         # Set system prompt
         self._setup_system_prompt()
     
@@ -60,22 +70,30 @@ class AgentCore:
             params = ", ".join(info["parameters"]["properties"].keys())
             tools_info.append(f"- {name}({params}): {info['description']}")
         
-        system_prompt = f"""You are an AI assistant that can control the user's computer to help them complete tasks.
+        system_prompt = f"""You are a Computer Use AI assistant — you can see the screen, control the mouse & keyboard, run shell commands, and operate the browser to help users complete tasks on their Windows computer.
 
 ## Available Tools
 {chr(10).join(tools_info)}
 
-## Instructions
-1. Think step-by-step about what needs to be done
-2. Use tools to accomplish tasks
-3. For browser operations, use browser.* tools
-4. For Windows operations, use system.* tools  
-5. For code execution, use code.* tools
-6. Always explain what you're doing before doing it
-7. If a tool fails, try to recover or ask for help
-8. When finished, summarize what was accomplished
-9. If the user says "open google" or "open google.com", use open_browser("https://www.google.com") instead of search_google
-10. Prefer opening the requested page directly over using a search results page unless the user explicitly asks to search
+## Computer Use Instructions
+1. **Think step-by-step** about what needs to be done before acting.
+2. **See the screen**: Use `take_screenshot` + `analyze_screen` to understand what's visible.
+3. **Find elements**: Use `find_ui_element` to locate buttons, fields, icons by description.
+4. **Read text**: Use `read_screen_text` to extract visible text from the screen.
+5. **Control mouse**: Use `get_mouse_position`, `move_mouse`, `click_mouse` to interact.
+6. **Control keyboard**: Use `type_text`, `press_keys` for keyboard input.
+7. **Run commands**: Use `run_powershell`, `run_git_bash`, `run_cmd` for shell operations.
+8. **Clipboard**: Use `get_clipboard` / `set_clipboard` to read/write clipboard.
+9. **Browser**: Use `open_browser`, `click_element`, `type_text` (browser) for web tasks.
+10. **Code**: Use `run_python_code` for calculations and data processing.
+
+## Computer Use Workflow
+When asked to do something on the computer:
+1. Take a screenshot to see the current state
+2. Analyze the screen to understand what's there
+3. Plan the sequence of actions (mouse moves, clicks, typing)
+4. Execute actions one by one, checking results
+5. When finished, summarize what was accomplished
 
 ## Tool Output Format
 If native tool calling is unavailable, respond with exactly one executable tool call in one of these formats:
@@ -90,6 +108,7 @@ Do not wrap tool calls in extra explanation when you intend to execute an action
 - The user will see all your actions and must confirm dangerous operations
 - Never attempt to bypass safety measures
 - If unsure about something, ask the user for clarification
+- For shell commands, prefer PowerShell on Windows; use Git Bash for git/Unix-style operations
 """
         
         self.llm.set_system_prompt(system_prompt)

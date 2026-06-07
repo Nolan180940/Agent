@@ -1,7 +1,28 @@
+# ── LLM Provider ──────────────────────────────────────────────────────────
+# provider: "siliconflow" (cloud) or "ollama" (local)
+# For SiliconFlow, get your API key at https://cloud.siliconflow.cn/account/ak
 llm:
-  model: "qwen2.5-coder:7b"
-  base_url: "http://localhost:11434"
+  provider: "siliconflow"               # ollama | siliconflow
+  model: "deepseek-ai/DeepSeek-V4-Flash" # main LLM for reasoning & tool calling
+  vision_model: "Qwen/Qwen3-VL-32B-Instruct"  # VLM for screenshot analysis
+  base_url: "http://localhost:11434"     # only used when provider=ollama
+  api_key: "sk-imvftvlkbfdfvhsulbpsqxhkmjgzymngszcanyfsnslonbdb"                            # SiliconFlow API key (or set SILICONFLOW_API_KEY env var)
   context_limit: 10
+
+# ── Recommended SiliconFlow models ─────────────────────────────────────────
+# Vision (VLM):
+#   Qwen/Qwen3-VL-32B-Instruct     ← best balance, ￥3.5/M in / ￥7/M out
+#   Qwen/Qwen2.5-VL-72B-Instruct   ← strongest VLM, ￥10/M in / ￥20/M out
+#   Qwen/Qwen2.5-VL-32B-Instruct   ← solid, ￥5/M in / ￥10/M out
+#   Qwen/Qwen2.5-VL-7B-Instruct    ← lightweight, ￥1.5/M in / ￥3/M out
+# Language (LLM):
+#   deepseek-ai/DeepSeek-V4-Pro    ← strongest reasoning, ￥12/M in / ￥24/M out
+#   deepseek-ai/DeepSeek-V4-Flash  ← fast & cheap, ￥1/M in / ￥2/M out
+#   Pro/moonshotai/Kimi-K2.6       ← great agent, ￥6.5/M in / ￥27/M out
+#   Pro/zai-org/GLM-5.1            ← vibe coding, ￥6/M in / ￥28/M out
+#   MiniMax-M2.5                   ← agent specialist, check pricing
+#   Qwen/Qwen3-235B-A22B           ← strong open model, check pricing
+# ───────────────────────────────────────────────────────────────────────────
 
 security:
   mode: "safe"

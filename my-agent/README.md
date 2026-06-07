@@ -97,9 +97,11 @@ pip install -r requirements.txt
 
 ```yaml
 llm:
-  model: "qwen2.5-coder:7b"  # 模型名称
-  base_url: "http://localhost:11434"  # Ollama API 地址
-  context_limit: 10  # 历史对话轮次限制
+  provider: "siliconflow"               # ollama | siliconflow
+  model: "deepseek-ai/DeepSeek-V4-Flash" # 主力 LLM
+  vision_model: "Qwen/Qwen3-VL-32B-Instruct"  # 视觉模型
+  api_key: "sk-your-key-here"           # SiliconFlow API Key
+  context_limit: 10
 
 security:
   mode: "safe"  # safe=安全模式 (每步确认), trusted=信任模式 (自动执行)
@@ -111,6 +113,9 @@ automation:
 scheduler:
   enabled: true  # 是否启用定时任务
 ```
+
+> 💡 **SiliconFlow API Key**: 在 https://cloud.siliconflow.cn/account/ak 免费获取。
+> 也可以设置环境变量 `SILICONFLOW_API_KEY`。
 
 ### 3. 启动系统
 

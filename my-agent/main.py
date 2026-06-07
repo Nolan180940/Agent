@@ -20,7 +20,7 @@ from tools.browser import configure_browser
 
 # Load configuration
 config_path = Path(__file__).parent / "config.yaml"
-with open(config_path) as f:
+with open(config_path, encoding="utf-8") as f:
     config = yaml.safe_load(f)
 
 firecrawl_key = config.get("firecrawl", {}).get("api_key")
@@ -33,7 +33,10 @@ configure_browser(config["automation"]["browser"], config["automation"]["headles
 llm = LLMProvider(
     model=config["llm"]["model"],
     base_url=config["llm"]["base_url"],
-    context_limit=config["llm"]["context_limit"]
+    context_limit=config["llm"]["context_limit"],
+    provider=config["llm"].get("provider", "ollama"),
+    api_key=config["llm"].get("api_key", ""),
+    vision_model=config["llm"].get("vision_model", "Qwen/Qwen3-VL-32B-Instruct"),
 )
 agent = AgentCore(
     llm=llm,
